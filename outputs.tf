@@ -1,0 +1,12 @@
+output "state_machine_arn"    { value = aws_sfn_state_machine.guardrail.arn }
+output "guardrail_arn"        { value = aws_bedrock_guardrail.main.guardrail_arn }
+output "guardrail_id"         { value = aws_bedrock_guardrail.main.guardrail_id }
+output "guardrail_version"    { value = aws_bedrock_guardrail_version.main.version }
+output "hitl_table_name"      { value = aws_dynamodb_table.hitl_approvals.name }
+output "hitl_table_stream_arn" { value = aws_dynamodb_table.hitl_approvals.stream_arn }
+output "snapshot_bucket"      { value = aws_s3_bucket.snapshots.id }
+output "hitl_api_url"         { value = "https://${aws_api_gateway_rest_api.hitl.id}.execute-api.${local.region}.amazonaws.com/${var.environment}" }
+output "kms_key_arn"          { value = local.kms_key_arn }
+output "dashboard_name"       { value = aws_cloudwatch_dashboard.guardrail.dashboard_name }
+output "metric_namespace"     { value = local.metric_namespace }
+output "block_rate_alarm_arn" { value = aws_cloudwatch_metric_alarm.block_rate_low.arn }
