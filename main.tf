@@ -59,8 +59,14 @@ resource "aws_bedrock_guardrail" "main" {
   }
 
   sensitive_information_policy_config {
-    pii_entities_config { type = "AWS_ACCESS_KEY", action = "BLOCK" }
-    pii_entities_config { type = "AWS_SECRET_KEY", action = "BLOCK" }
+    pii_entities_config {
+      type   = "AWS_ACCESS_KEY"
+      action = "BLOCK"
+    }
+    pii_entities_config {
+      type   = "AWS_SECRET_KEY"
+      action = "BLOCK"
+    }
   }
 
   tags = local.common_tags
