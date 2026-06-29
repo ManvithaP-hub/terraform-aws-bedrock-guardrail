@@ -1,5 +1,7 @@
 # terraform-aws-bedrock-guardrail
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 A production-grade Terraform module implementing the five-layer guardrail architecture for governing autonomous AI agents in cloud-native DevOps pipelines on AWS.
 
 This module is the infrastructure implementation of the architecture described in:
