@@ -1,4 +1,4 @@
-# terraform-aws-agentic-guardrail
+# terraform-aws-bedrock-guardrail
 
 A production-grade Terraform module implementing the five-layer guardrail architecture for governing autonomous AI agents in cloud-native DevOps pipelines on AWS.
 
@@ -89,7 +89,7 @@ An unavailable approver never produces an implicit approval. This is enforced by
 
 ```hcl
 module "agentic_guardrail" {
-  source = "ManvithaP-hub/agentic-guardrail/aws"
+  source = "ManvithaP-hub/bedrock-guardrail/aws"
 
   name_prefix  = "my-agent"
   environment  = "prod"
