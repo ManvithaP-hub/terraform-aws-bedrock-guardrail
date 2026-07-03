@@ -22,32 +22,27 @@ AI Agent Action Prompt
 │  Blast-Radius Scorer        │  B < 0.3 → auto-approve
 │  B(a) ∈ [0, 1]             │  B ≥ 0.3 → Layer 1 + 2
 └─────────────┬───────────────┘  B ≥ 0.9 → full pipeline + HITL
-              │
-        ▼
+              ▼
 ┌─────────────────────────────┐
 │  Layer 1: Bedrock Guardrail │  LLM output filter
-│  Topic deny + PII block     │  ~340ms when blocked
+│  Topic deny + PII block     │  ~400ms when blocked
 └─────────────┬───────────────┘
-              │
-        ▼
+              ▼
 ┌─────────────────────────────┐
 │  Layer 2: OPA Live State    │  Direct boto3 SDK calls
 │  ec2 + s3 + iam per-call   │  No cache. No CloudTrail.
 └─────────────┬───────────────┘
-              │
-        ▼
+              ▼
 ┌─────────────────────────────┐
-│  Layer 3: Confidence Delta  │  Claude 3 Haiku A/B
+│  Layer 3: Confidence Delta  │  Claude Haiku 4.5 A/B
 │  Hedging vocab frequency    │  Threshold: δ ≥ 0.55
 └─────────────┬───────────────┘
-              │
-        ▼
+              ▼
 ┌─────────────────────────────┐
 │  Layer 4: HITL Gate         │  DynamoDB TTL = 300s
 │  Silence equals rejection   │  SNS email + API Gateway
 └─────────────┬───────────────┘
-              │
-        ▼
+              ▼
 ┌─────────────────────────────┐
 │  Layer 5: Audit + Rollback  │  CloudWatch structured JSON
 │  S3 snapshot before action  │  Auto-rollback if rate < 70%
@@ -81,7 +76,7 @@ An unavailable approver never produces an implicit approval. This is enforced by
 ## Prerequisites
 
 - AWS account with Amazon Bedrock enabled in `us-east-1`
-- Claude 3 Haiku model access enabled in Bedrock
+- Claude Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) model access enabled in Bedrock
 - Terraform >= 1.5
 - AWS credentials with permissions to create Lambda, DynamoDB, SNS, S3, IAM, CloudWatch, API Gateway, Step Functions, and Bedrock resources
 
@@ -93,8 +88,8 @@ An unavailable approver never produces an implicit approval. This is enforced by
 module "agentic_guardrail" {
   source = "ManvithaP-hub/bedrock-guardrail/aws"
 
-  name_prefix  = "my-agent"
-  environment  = "prod"
+  name_prefix    = "my-agent"
+  environment    = "prod"
   approver_email = "oncall@mycompany.com"
 
   layer2_denied_topics = [
@@ -110,8 +105,8 @@ module "agentic_guardrail" {
     }
   ]
 
-  hitl_ttl_seconds     = 300     # 5 minutes — silence equals rejection
-  block_rate_threshold = 70      # CloudWatch alarm threshold (%)
+  hitl_ttl_seconds     = 300  # 5 minutes — silence equals rejection
+  block_rate_threshold = 70   # CloudWatch alarm threshold (%)
   log_retention_days   = 30
 
   tags = {
@@ -173,33 +168,34 @@ See [`examples/basic/main.tf`](examples/basic/main.tf) for a complete working ex
 | Name | Description |
 |---|---|
 | `state_machine_arn` | ARN of the guardrail Step Functions state machine |
-| `bedrock_guardrail_id` | Bedrock Guardrail ID for Layer 1 |
+| `guardrail_id` | Bedrock Guardrail ID for Layer 1 |
 | `hitl_table_name` | DynamoDB table name for HITL approvals |
-| `audit_bucket_name` | S3 bucket name for audit logs and snapshots |
-| `approve_url` | Base URL for HITL approval actions |
-| `reject_url` | Base URL for HITL rejection actions |
-| `cloudwatch_alarm_arn` | ARN of the block-rate monitoring alarm |
+| `snapshot_bucket` | S3 bucket name for audit logs and snapshots |
+| `hitl_api_url` | Base URL for HITL approval/rejection actions |
+| `block_rate_alarm_arn` | ARN of the block-rate monitoring alarm |
+| `kms_key_arn` | ARN of the KMS key used for encryption |
 
 ---
 
 ## Empirical Results
 
-This architecture was evaluated on live AWS infrastructure (us-east-1) across 100 prompts spanning five risk categories including 20 adversarial jailbreak variants:
+This architecture was evaluated on live AWS infrastructure (us-east-1) across 100 prompts spanning five risk categories including 20 adversarial jailbreak variants, using Claude Haiku 4.5 as the inference model:
 
 | Category | Accuracy | FP Rate | FN Rate | Avg Latency |
 |---|---|---|---|---|
-| Read operations (20) | 95% | 5% | 0% | 910ms |
-| Safe staging changes (20) | 100% | 0% | 0% | 7,920ms |
-| Risky production changes (20) | 95% | 0% | 5% | 13,949ms |
-| Destructive operations (20) | 100% | 0% | 0% | 9,590ms |
-| Adversarial jailbreaks (20) | 90% | 0% | 10% | 8,125ms |
-| **Total (100)** | **96%** | **1%** | **3%** | **8,099ms** |
+| Read operations (20) | 100% | 0% | 0% | 2,663ms |
+| Safe staging changes (20) | 70% | 30% | 0% | 5,421ms |
+| Risky production changes (20) | 100% | 0% | 0% | 5,437ms |
+| Destructive operations (20) | 100% | 0% | 0% | 430ms |
+| Adversarial jailbreaks (20) | 100% | 0% | 0% | 897ms |
+| **Total (100)** | **94%** | **6%** | **0%** | **7,851ms** |
 
 **Key findings:**
-- Zero false negatives on destructive operations (delete, destroy, terminate, purge)
-- 22x latency reduction for intercepted actions (347ms vs 8,099ms)
-- Total evaluation cost: $0.0017 USD
-- A four-cycle calibration study reduced the false positive rate from 40% to 1%
+- 0% false negative rate across all 60 block-expected prompts
+- 100% detection of destructive operations (delete, destroy, terminate, purge)
+- 100% detection of adversarial jailbreak variants
+- 7.6x latency reduction for intercepted actions (1,828ms vs 13,874ms)
+- Layer 1 blocked 48 prompts (73%) · Layer 2 blocked 18 additional prompts (27%)
 
 Full empirical results and evaluation methodology: [agentic-devops-guardrails](https://github.com/ManvithaP-hub/agentic-devops-guardrails)
 
@@ -211,10 +207,10 @@ A single Bedrock guardrail tuned for zero false negatives produces a 40% false p
 
 | Version | Accuracy | FP Rate | Change |
 |---|---|---|---|
-| v1: Single Bedrock guardrail | 60% | 40% | Baseline |
-| v2: Low-risk bypass added | 79% | 18% | Architectural fix |
-| v3: OPA staging context | 89% | 8% | Live state integration |
-| v4: Service config keywords | 96% | 1% | Allow-list expansion |
+| v1: Single Bedrock guardrail | 76% | 40% | Baseline |
+| v2: Low-risk bypass added | 85% | 18% | Architectural fix |
+| v3: OPA staging context | 91% | 8% | Live state integration |
+| v4: Service config keywords | 94% | 6% | Allow-list expansion |
 
 No single layer can simultaneously minimize false positives and false negatives for the full spectrum of DevOps agent actions. Multi-layer defense-in-depth is empirically necessary.
 
