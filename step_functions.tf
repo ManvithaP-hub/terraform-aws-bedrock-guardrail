@@ -34,7 +34,7 @@ resource "aws_cloudwatch_log_group" "sfn" {
 resource "aws_sfn_state_machine" "guardrail" {
   name     = "${local.name_prefix}-guardrail-orchestrator"
   role_arn = aws_iam_role.sfn.arn
-  type     = "EXPRESS"
+  type     = "STANDARD"
 
   definition = jsonencode({
     Comment = "Five-Layer Agentic AI Guardrail – agentic AI guardrail architecture"

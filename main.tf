@@ -6,8 +6,9 @@ locals {
   common_tags      = merge(var.tags, { Module = "bedrock-guardrail-stack", Environment = var.environment, ManagedBy = "Terraform" })
   kms_key_arn      = var.kms_key_arn != null ? var.kms_key_arn : aws_kms_key.main[0].arn
   metric_namespace = "BedrockGuardrail/${local.name_prefix}"
-  account_id       = data.aws_caller_identity.current.account_id
-  region           = data.aws_region.current.name
+  account_id        = data.aws_caller_identity.current.account_id
+  region            = data.aws_region.current.region
+  audit_bucket_name = var.audit_bucket_name != null ? var.audit_bucket_name : "${var.name_prefix}-${var.environment}-snapshots-${data.aws_caller_identity.current.account_id}"
 }
 
 # ── KMS ──────────────────────────────────────────────────────────────────────
@@ -162,7 +163,7 @@ resource "aws_sns_topic" "hitl" {
 resource "aws_sns_topic_subscription" "hitl_email" {
   topic_arn = aws_sns_topic.hitl.arn
   protocol  = "email"
-  endpoint  = var.hitl_approver_email
+  endpoint  = var.approver_email
 }
 
 # ── Layer 4 – API Gateway (HITL approve/reject URLs) ─────────────────────────

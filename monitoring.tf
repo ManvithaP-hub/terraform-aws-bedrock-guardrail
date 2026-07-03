@@ -90,6 +90,7 @@ resource "aws_cloudwatch_metric_alarm" "sfn_failures" {
 
 # ── CloudWatch Dashboard ──────────────────────────────────────────────────────
 resource "aws_cloudwatch_dashboard" "guardrail" {
+  count = 0
   dashboard_name = "${local.name_prefix}-guardrail"
 
   dashboard_body = jsonencode({

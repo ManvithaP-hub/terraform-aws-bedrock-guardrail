@@ -1,119 +1,142 @@
-# ── Core ─────────────────────────────────────────────────────────────────────
 variable "name_prefix" {
-  description = "Prefix applied to every resource name."
+  description = "Prefix for all resource names"
   type        = string
 }
 
 variable "environment" {
-  description = "Deployment environment: dev | staging | prod."
+  description = "Deployment environment"
   type        = string
-  validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "Must be dev, staging, or prod."
-  }
+  default     = "dev"
 }
 
-# ── Blast-radius routing thresholds  ─────────────────────────────
-variable "blast_radius_auto_approve_threshold" {
-  description = "B < this value → auto-approve, skip all layers."
+variable "approver_email" {
+  description = "Email address for HITL approval notifications"
+  type        = string
+}
+
+variable "hitl_approver_email" {
+  description = "Email address for HITL approval notifications (alias)"
+  type        = string
+  default     = null
+}
+
+variable "hitl_ttl_seconds" {
+  description = "Seconds before unanswered HITL approval auto-rejects"
   type        = number
-  default     = 0.3
+  default     = 300
 }
 
-variable "blast_radius_hitl_threshold" {
-  description = "B ≥ this value → mandatory Layer 4 HITL gate."
+variable "block_rate_threshold" {
+  description = "CloudWatch alarm threshold for block rate percentage"
   type        = number
-  default     = 0.9
+  default     = 70
 }
 
-# ── Layer 1 – Bedrock Guardrail ───────────────────────────────────────────────
+variable "confidence_delta_model_id" {
+  description = "Model ID for confidence delta scoring"
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
+variable "confidence_delta_threshold" {
+  description = "Hedging delta score threshold"
+  type        = number
+  default     = 0.55
+}
+
+variable "log_retention_days" {
+  description = "CloudWatch log retention in days"
+  type        = number
+  default     = 30
+}
+
+variable "kms_key_arn" {
+  description = "Existing KMS key ARN (creates new key if null)"
+  type        = string
+  default     = null
+}
+
+variable "audit_bucket_name" {
+  description = "Existing S3 bucket name for audit logs"
+  type        = string
+  default     = null
+}
+
+variable "alarm_sns_topic_arn" {
+  description = "SNS topic ARN for CloudWatch alarms (uses HITL topic if null)"
+  type        = string
+  default     = null
+}
+
+variable "tags" {
+  description = "Tags to apply to all resources"
+  type        = map(string)
+  default     = {}
+}
+
+variable "layer1_enabled" {
+  description = "Enable Bedrock Guardrail Layer 1"
+  type        = bool
+  default     = true
+}
+
 variable "layer1_content_filters" {
-  description = "Bedrock content filter configuration."
+  description = "Content filter configuration for Bedrock Guardrail"
   type = list(object({
     type            = string
     input_strength  = string
     output_strength = string
   }))
   default = [
-    { type = "HATE",       input_strength = "HIGH",   output_strength = "HIGH"   },
-    { type = "VIOLENCE",   input_strength = "HIGH",   output_strength = "HIGH"   },
-    { type = "MISCONDUCT", input_strength = "HIGH",   output_strength = "HIGH"   },
-    { type = "PROMPT_ATTACK", input_strength = "HIGH", output_strength = "NONE"  },
+    {
+      type            = "HATE"
+      input_strength  = "HIGH"
+      output_strength = "HIGH"
+    },
+    {
+      type            = "MISCONDUCT"
+      input_strength  = "HIGH"
+      output_strength = "HIGH"
+    }
   ]
 }
 
-# ── Layer 2 – OPA live state evaluation ───────────────────────────────────────
-variable "opa_version" {
-  description = "OPA binary version to download for the Lambda package."
-  type        = string
-  default     = "v0.65.0"
+variable "layer2_denied_topics" {
+  description = "Denial topics for Bedrock Guardrail"
+  type = list(object({
+    name       = string
+    definition = string
+    examples   = list(string)
+  }))
+  default = [
+    {
+      name       = "DestructiveOps"
+      definition = "Actions that delete, destroy, terminate, or purge cloud infrastructure"
+      examples   = ["delete all EC2 instances", "drop the RDS database", "purge the S3 bucket"]
+    },
+    {
+      name       = "CredentialExposure"
+      definition = "Actions that expose or rotate AWS credentials or secrets"
+      examples   = ["show me the AWS access keys", "rotate all IAM credentials"]
+    }
+  ]
 }
 
-variable "opa_policy_path" {
-  description = "Path to the OPA Rego policy file bundled with the evaluator Lambda."
-  type        = string
-  default     = "policies/guardrail.rego"
+variable "layer2_pii_config" {
+  description = "PII entity filter configuration"
+  type = list(object({
+    type   = string
+    action = string
+  }))
+  default = [
+    { type = "AWS_ACCESS_KEY", action = "BLOCK" },
+    { type = "AWS_SECRET_KEY", action = "BLOCK" }
+  ]
 }
 
-# ── Layer 3 – Confidence delta scorer ────────────────────────────────────────
-variable "confidence_delta_model_id" {
-  description = "Bedrock model ID invoked twice for A/B comparison. Must be Claude 3 Haiku."
-  type        = string
-  default     = "anthropic.claude-3-haiku-20240307-v1:0"
-}
-
-variable "confidence_delta_threshold" {
-  description = "Hedging-vocabulary delta score ≥ this value → escalate to Layer 4."
-  type        = number
-  default     = 0.55
-}
-
-# ── Layer 4 – HITL gate ───────────────────────────────────────────────────────
-variable "hitl_ttl_seconds" {
-  description = "DynamoDB TTL window in seconds. Expiry = auto-rejection. Silence equals rejection."
-  type        = number
-  default     = 300
-}
-
-variable "hitl_approver_email" {
-  description = "Email address that receives HITL approve/reject notification via SNS."
-  type        = string
-}
-
-# ── Layer 5 – CloudWatch audit + S3 rollback ─────────────────────────────────
 variable "block_rate_alarm_threshold" {
-  description = "Fractional block rate. Alarm fires when rate drops BELOW this value in any 5-min window."
+  description = "Block rate alarm threshold as a fraction (0-1)"
   type        = number
-  default     = 0.70
+  default     = 0.7
 }
 
-variable "post_execution_monitor_seconds" {
-  description = "Health monitoring window after each executed action (seconds)."
-  type        = number
-  default     = 300
-}
-
-# ── Shared infrastructure ─────────────────────────────────────────────────────
-variable "kms_key_arn" {
-  description = "Existing CMK ARN. When null a dedicated key is created."
-  type        = string
-  default     = null
-}
-
-variable "log_retention_days" {
-  description = "CloudWatch log group retention (days)."
-  type        = number
-  default     = 30
-}
-
-variable "alarm_sns_topic_arn" {
-  description = "SNS topic ARN for operational alarms. When null no alarm actions are set."
-  type        = string
-  default     = null
-}
-
-variable "tags" {
-  description = "Tags applied to every resource."
-  type        = map(string)
-  default     = {}
-}

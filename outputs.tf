@@ -7,6 +7,6 @@ output "hitl_table_stream_arn" { value = aws_dynamodb_table.hitl_approvals.strea
 output "snapshot_bucket"      { value = aws_s3_bucket.snapshots.id }
 output "hitl_api_url"         { value = "https://${aws_api_gateway_rest_api.hitl.id}.execute-api.${local.region}.amazonaws.com/${var.environment}" }
 output "kms_key_arn"          { value = local.kms_key_arn }
-output "dashboard_name"       { value = aws_cloudwatch_dashboard.guardrail.dashboard_name }
+output "dashboard_name"       { value = length(aws_cloudwatch_dashboard.guardrail) > 0 ? aws_cloudwatch_dashboard.guardrail[0].dashboard_name : "" }
 output "metric_namespace"     { value = local.metric_namespace }
 output "block_rate_alarm_arn" { value = aws_cloudwatch_metric_alarm.block_rate_low.arn }

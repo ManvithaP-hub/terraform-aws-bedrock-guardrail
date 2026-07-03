@@ -168,8 +168,8 @@ resource "aws_lambda_function" "hitl_initiator" {
       HITL_TABLE_NAME  = aws_dynamodb_table.hitl_approvals.name
       HITL_SNS_ARN     = aws_sns_topic.hitl.arn
       HITL_TTL_SECONDS = tostring(var.hitl_ttl_seconds)
-      APPROVE_BASE_URL = "${aws_apigatewayv2_api.hitl.api_endpoint}/approve"
-      REJECT_BASE_URL  = "${aws_apigatewayv2_api.hitl.api_endpoint}/reject"
+      APPROVE_BASE_URL = "${aws_api_gateway_rest_api.hitl.id}.execute-api.${local.region}.amazonaws.com/${var.environment}/approve"
+      REJECT_BASE_URL  = "${aws_api_gateway_rest_api.hitl.id}.execute-api.${local.region}.amazonaws.com/${var.environment}/reject"
     })
   }
 

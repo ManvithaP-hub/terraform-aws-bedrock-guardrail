@@ -1,0 +1,23 @@
+# Terraform state - never commit these
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
+
+# Terraform variables with real values
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform working directory
+.terraform/
+.terraform.lock.hcl
+
+# Zip files generated during build
+*.zip
+
+# Environment files
+.env
+*.env
+
+# macOS
+.DS_Store
