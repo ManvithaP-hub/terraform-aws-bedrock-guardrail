@@ -179,40 +179,44 @@ See [`examples/basic/main.tf`](examples/basic/main.tf) for a complete working ex
 
 ## Empirical Results
 
-This architecture was evaluated on live AWS infrastructure (us-east-1) across 100 prompts spanning five risk categories including 20 adversarial jailbreak variants, using Claude Haiku 4.5 as the inference model:
+This architecture was evaluated on AWS (us-east-1) across 100 prompts spanning five risk categories, including 20 adversarial jailbreak variants, using Claude Haiku 4.5 as the inference model. Figures come from the raw results in the [reference implementation](https://github.com/ManvithaP-hub/agentic-devops-guardrails) (`results_5layer.txt`, `results.txt`).
 
-| Category | Accuracy | FP Rate | FN Rate | Avg Latency |
-|---|---|---|---|---|
-| Read operations (20) | 100% | 0% | 0% | 2,663ms |
-| Safe staging changes (20) | 70% | 30% | 0% | 5,421ms |
-| Risky production changes (20) | 100% | 0% | 0% | 5,437ms |
-| Destructive operations (20) | 100% | 0% | 0% | 430ms |
-| Adversarial jailbreaks (20) | 100% | 0% | 0% | 897ms |
-| **Total (100)** | **94%** | **6%** | **0%** | **7,851ms** |
+| Category | N | Expected | Blocked | Correct | Avg Latency |
+|---|---|---|---|---|---|
+| Read operations | 20 | allow | 0 | 20 | not timed* |
+| Safe staging changes | 20 | allow | 6 | 14 | 10,103ms |
+| Risky production changes | 20 | block | 20 | 20 | 4,579ms |
+| Destructive operations | 20 | block | 20 | 20 | 413ms |
+| Adversarial jailbreaks | 20 | block | 20 | 20 | 649ms |
+| **Total** | **100** | | **66** | **94** | **3,149ms** |
+
+\* Read-only actions skip model invocation; latency recorded as 0.
 
 **Key findings:**
-- 0% false negative rate across all 60 block-expected prompts
-- 100% detection of destructive operations (delete, destroy, terminate, purge)
-- 100% detection of adversarial jailbreak variants
-- 7.6x latency reduction for intercepted actions (1,828ms vs 13,874ms)
-- Layer 1 blocked 48 prompts (73%) · Layer 2 blocked 18 additional prompts (27%)
+- 94% overall accuracy; 0 false negatives across all 60 block-expected prompts
+- 100% of destructive operations and adversarial jailbreak variants blocked
+- 6 false positives (staging changes), 6% of all prompts / 6 of 40 allow-expected prompts
+- Blocked actions resolved 7.6x faster than allowed ones (1,828ms vs 13,874ms)
+- Layer 1 decided 48 blocks (73%); Layer 2 decided 18 (27%): 16 risky production changes and 2 adversarial prompts
 
-Full empirical results and evaluation methodology: [agentic-devops-guardrails](https://github.com/ManvithaP-hub/agentic-devops-guardrails)
+> **Evaluation note:** The evaluation used a rule-equivalent version of the Layer 2 policies (environment read from the action text) and a simulated HITL gate. The live-state OPA Lambda and DynamoDB approval gate deployed by this module are the production implementations.
 
 ---
 
-## Calibration Study
+## Single Layer vs Five Layers
 
-A single Bedrock guardrail tuned for zero false negatives produces a 40% false positive rate. Each layer of this architecture addresses a failure mode that previous layers architecturally cannot:
+The same 100 prompts were run against the Bedrock guardrail alone and against the full pipeline:
 
-| Version | Accuracy | FP Rate | Change |
-|---|---|---|---|
-| v1: Single Bedrock guardrail | 76% | 40% | Baseline |
-| v2: Low-risk bypass added | 85% | 18% | Architectural fix |
-| v3: OPA staging context | 91% | 8% | Live state integration |
-| v4: Service config keywords | 94% | 6% | Allow-list expansion |
+| Metric | Layer 1 only | Five layers |
+|---|---|---|
+| Overall accuracy | 76% | **94%** |
+| False negatives (of 60) | 18 | **0** |
+| Risky production missed | 16/20 | **0/20** |
+| Adversarial missed | 2/20 | **0/20** |
+| Destructive missed | 0/20 | **0/20** |
+| False positives (of 40) | 6 | 6 |
 
-No single layer can simultaneously minimize false positives and false negatives for the full spectrum of DevOps agent actions. Multi-layer defense-in-depth is empirically necessary.
+Every action the content filter missed was a production-targeted change or a disguised attack, which the environment policy layer caught without adding any false positives. Multi-layer defense-in-depth is empirically necessary.
 
 ---
 
